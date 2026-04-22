@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Graph Analyzer · Weisfeiler–Leman Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #f0f2f5;
+  --white:     #ffffff;
+  --border:    #e2e5ea;
+  --text:      #1a1d23;
+  --muted:     #6b7280;
+  --muted2:    #9ca3af;
+  --accent:    #5b5bd6;
+  --accent-lt: #ededfb;
+  --accent-dk: #4848c2;
+  --green:     #16a34a;
+  --green-lt:  #dcfce7;
+  --red:       #dc2626;
+  --red-lt:    #fee2e2;
+  --orange:    #ea580c;
+  --nav-h:     60px;
+  --sidebar-w: 320px;
+  --radius:    12px;
+  --shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+}
+
+html, body { height: 100%; }
+body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+
+/* ── Navbar ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: var(--nav-h);
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 24px; gap: 0;
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; margin-right: auto; text-decoration: none; }
+.nav-icon { width: 36px; height: 36px; background: var(--accent-lt); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.nav-title { display: flex; flex-direction: column; line-height: 1.2; }
+.nav-sub { font-size: 10px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.nav-name { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+.nav-name em { font-style: italic; color: var(--accent); font-family: 'Playfair Display', serif; }
+.nav-tabs { display: flex; gap: 4px; align-items: center; }
+.nav-tab { padding: 7px 16px; border-radius: 8px; border: none; background: transparent; color: var(--muted); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .15s, color .15s; }
+.nav-tab:hover { background: var(--bg); color: var(--text); }
+.nav-tab.active { background: var(--accent-lt); color: var(--accent); font-weight: 600; }
+.nav-status { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 20px; background: var(--accent-lt); color: var(--accent); font-size: 13px; font-weight: 600; margin-left: 8px; }
+.nav-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* ── Layout ── */
+.layout { display: flex; min-height: 100vh; padding-top: var(--nav-h); }
+
+/* ── Sidebar ── */
+.sidebar { width: var(--sidebar-w); flex-shrink: 0; background: var(--white); border-right: 1px solid var(--border); padding: 24px 20px; overflow-y: auto; height: calc(100vh - var(--nav-h)); position: sticky; top: var(--nav-h); }
+.sidebar-section { margin-bottom: 28px; }
+.sidebar-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted2); margin-bottom: 10px; }
+.sidebar-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 20px; letter-spacing: -.02em; }
+
+.mode-toggle { display: flex; background: var(--bg); border-radius: 10px; padding: 4px; gap: 4px; margin-bottom: 24px; }
+.mode-btn { flex: 1; padding: 8px 10px; border: none; border-radius: 7px; background: transparent; color: var(--muted); font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.mode-btn.active { background: var(--white); color: var(--accent); font-weight: 600; box-shadow: var(--shadow); }
+
+.k-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.k-btn { width: 32px; height: 32px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--white); color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color .15s, background .15s; flex-shrink: 0; }
+.k-btn:hover { border-color: var(--accent); background: var(--accent-lt); color: var(--accent); }
+.k-display { flex: 1; text-align: center; font-size: 22px; font-weight: 700; color: var(--text); background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 0; }
+.k-hint { font-size: 11px; color: var(--muted2); margin-bottom: 16px; line-height: 1.4; }
+
+.limits-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
+.limits-header { padding: 9px 14px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.limits-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.limits-table th { padding: 6px 14px; text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+.limits-table td { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--text); }
+.limits-table tr.active-k td { background: var(--accent-lt); }
+.limits-table tr.active-k td:first-child { font-weight: 700; color: var(--accent); }
+.k-badge { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; }
+.unlimited { color: var(--green); font-weight: 600; }
+.sup { font-size: 10px; vertical-align: super; }
+
+.file-section-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.fmt-badge { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; }
+.file-drop { border: 2px dashed var(--border); border-radius: 10px; padding: 18px 14px; text-align: center; cursor: pointer; position: relative; overflow: hidden; transition: border-color .15s, background .15s; background: var(--bg); margin-bottom: 10px; }
+.file-drop:hover, .file-drop.drag-over { border-color: var(--accent); background: var(--accent-lt); }
+.file-drop.has-file { border-color: var(--green); background: #f0fdf4; border-style: solid; }
+.file-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.file-drop-icon { font-size: 22px; margin-bottom: 6px; }
+.file-drop-main { font-size: 12px; font-weight: 600; color: var(--text); }
+.file-drop-sub { font-size: 11px; color: var(--muted2); margin-top: 2px; }
+.file-drop-name { font-size: 11px; color: var(--green); font-weight: 600; margin-top: 4px; word-break: break-all; }
+
+.fmt-hint { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 11px; color: var(--muted); line-height: 1.7; margin-bottom: 20px; }
+.fmt-hint code { background: var(--white); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; font-size: 10.5px; color: var(--accent); }
+
+.error-box { background: var(--red-lt); border: 1px solid #fca5a5; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--red); margin-bottom: 14px; display: none; }
+
+.run-btn { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .15s, transform .1s, box-shadow .15s; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 8px rgba(91,91,214,.35); }
+.run-btn:hover { background: var(--accent-dk); box-shadow: 0 4px 12px rgba(91,91,214,.45); }
+.run-btn:active { transform: scale(.98); }
+.run-btn:disabled { background: var(--muted2); box-shadow: none; cursor: not-allowed; }
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+.run-btn.loading .spinner { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Main panel ── */
+.main { flex: 1; padding: 28px 32px; overflow-y: auto; }
+
+/* Empty state */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: calc(100vh - var(--nav-h) - 56px); text-align: center; gap: 16px; }
+.empty-title { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+.empty-sub { font-size: 14px; color: var(--muted); max-width: 340px; line-height: 1.6; }
+.empty-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.empty-chip { padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border); font-size: 12px; font-weight: 500; color: var(--muted); background: var(--white); }
+
+/* Results */
+#results { display: none; }
+.results-header { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted2); margin-bottom: 16px; }
+
+.verdict-card { border-radius: var(--radius); padding: 20px 24px; margin-bottom: 20px; border: 1.5px solid; display: flex; align-items: flex-start; gap: 16px; background: var(--white); box-shadow: var(--shadow); }
+.verdict-card.iso    { border-color: #86efac; }
+.verdict-card.notiso { border-color: #fca5a5; }
+.verdict-card.viz    { border-color: #c4b5fd; }
+.verdict-icon-wrap { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.verdict-card.iso    .verdict-icon-wrap { background: var(--green-lt); }
+.verdict-card.notiso .verdict-icon-wrap { background: var(--red-lt); }
+.verdict-card.viz    .verdict-icon-wrap { background: var(--accent-lt); }
+.verdict-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; letter-spacing: -.01em; }
+.verdict-card.iso    .verdict-title { color: var(--green); }
+.verdict-card.notiso .verdict-title { color: var(--red); }
+.verdict-card.viz    .verdict-title { color: var(--accent); }
+.verdict-detail { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+
+.stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.stat-pill { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; font-size: 12px; color: var(--muted); box-shadow: var(--shadow); display: flex; align-items: center; gap: 6px; }
+.stat-pill span { color: var(--accent); font-weight: 700; font-size: 14px; }
+
+/* ── Iteration stepper ── */
+.stepper-section { margin-bottom: 24px; }
+
+.stepper-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.stepper-title {
+  font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted2);
+}
+
+.stepper-counter {
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+
+.stepper-counter span { color: var(--accent); }
+
+/* Navigation controls */
+.stepper-controls {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; margin-bottom: 16px;
+}
+
+.step-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, color .15s;
+  box-shadow: var(--shadow);
+}
+.step-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-lt); }
+.step-btn:disabled { opacity: .4; cursor: not-allowed; }
+.step-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.step-btn.primary:hover:not(:disabled) { background: var(--accent-dk); }
+
+/* Progress dots */
+.step-dots {
+  display: flex; gap: 6px; align-items: center;
+  flex-wrap: wrap; justify-content: center;
+  margin-bottom: 14px;
+}
+
+.step-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  cursor: pointer;
+  transition: background .15s, transform .15s;
+  border: none;
+  padding: 0;
+}
+.step-dot:hover { background: var(--muted2); transform: scale(1.3); }
+.step-dot.active { background: var(--accent); transform: scale(1.4); }
+.step-dot.diverged { background: var(--red); }
+.step-dot.active.diverged { background: var(--red); }
+
+/* Side-by-side graphs */
+.graphs-side-by-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.graph-panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.graph-panel-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 600;
+  color: var(--muted);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.graph-panel-badge {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 4px;
+}
+.graph-panel-badge.g1 { background: var(--accent-lt); color: var(--accent); }
+.graph-panel-badge.g2 { background: #fce7f3; color: #be185d; }
+
+.graph-panel img { width: 100%; display: block; }
+
+.graph-panel-loading {
+  display: flex; align-items: center; justify-content: center;
+  height: 200px; color: var(--muted2); font-size: 12px;
+}
+
+/* Divergence callout */
+.diverge-callout {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--orange);
+  font-weight: 500;
+  margin-bottom: 12px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+.diverge-callout.visible { display: flex; }
+
+/* Analysis panel */
+.analysis-panel { margin-bottom: 24px; }
+.analysis-panel-header { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.analysis-panel-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.reason-card { background: var(--white); border: 1px solid var(--border); border-left: 3px solid var(--red); border-radius: 0 8px 8px 0; padding: 12px 16px; margin-bottom: 8px; cursor: pointer; transition: box-shadow .15s; box-shadow: var(--shadow); }
+.reason-card:hover { box-shadow: var(--shadow-md); }
+.reason-card.wl_divergence { border-left-color: var(--accent); }
+.reason-card.clustering, .reason-card.triangles { border-left-color: var(--orange); }
+.reason-card.wl_only { border-left-color: var(--muted2); }
+.reason-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.reason-title { font-weight: 600; font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.type-badge { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; background: #fee2e2; color: var(--red); }
+.type-badge.wl_divergence { background: var(--accent-lt); color: var(--accent); }
+.type-badge.clustering, .type-badge.triangles { background: #ffedd5; color: var(--orange); }
+.type-badge.wl_only { background: var(--bg); color: var(--muted); }
+.reason-toggle { font-size: 11px; color: var(--muted2); transition: transform .2s; flex-shrink: 0; }
+.reason-card.open .reason-toggle { transform: rotate(180deg); }
+.reason-body { display: none; margin-top: 10px; font-size: 12px; color: var(--muted); white-space: pre-wrap; line-height: 1.7; border-top: 1px solid var(--border); padding-top: 10px; font-family: 'Inter', monospace; }
+.reason-card.open .reason-body { display: block; }
+
+/* Single-graph grid view */
+.images-section { margin-top: 4px; }
+.images-section-header { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted2); margin-bottom: 14px; }
+.graph-image-wrap { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; box-shadow: var(--shadow); }
+.graph-image-wrap img { width: 100%; display: block; }
+
+@media (max-width: 768px) {
+  .layout { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); }
+  .main { padding: 20px 16px; }
+  .nav-tabs { display: none; }
+  .graphs-side-by-side { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="#">
+    <div class="nav-icon">🕸</div>
+    <div class="nav-title">
+      <span class="nav-sub">Weisfeiler–Leman Engine</span>
+      <span class="nav-name">Graph<em>Analyzer</em></span>
+    </div>
+  </a>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="setMode('visualize')">k-WL Test</button>
+    <button class="nav-tab" onclick="setMode('isomorphism')">Isomorphism</button>
+  </div>
+  <div class="nav-status">
+    <div class="nav-dot"></div>
+    Interactive
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-label">Configuration</div>
+    <div class="sidebar-title">Set up analysis</div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Analysis Mode</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="tab-viz" onclick="setMode('visualize')">◎ Single Graph</button>
+        <button class="mode-btn" id="tab-iso" onclick="setMode('isomorphism')">⊕ Compare</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Refinement Depth (k)</div>
+      <div class="k-row">
+        <button class="k-btn" onclick="changeK(-1)">−</button>
+        <div class="k-display" id="k-display">1</div>
+        <input type="hidden" id="k-input" value="1" />
+        <button class="k-btn" onclick="changeK(1)">+</button>
+      </div>
+      <div class="k-hint">Higher k = more discriminating power (true k-WL over k-tuples)</div>
+      <div class="limits-box">
+        <div class="limits-header"><span>ℹ</span> SAFE NODE LIMITS PER K</div>
+        <table class="limits-table">
+          <thead><tr><th>K</th><th>MAX NODES</th><th>TUPLES</th></tr></thead>
+          <tbody id="limits-body">
+            <tr class="active-k" data-k="1"><td><span class="k-badge">1</span></td><td><span class="unlimited">Unlimited</span></td><td>n</td></tr>
+            <tr data-k="2"><td>2</td><td>≤ 500</td><td>n<span class="sup">2</span></td></tr>
+            <tr data-k="3"><td>3</td><td>≤ 100</td><td>n<span class="sup">3</span></td></tr>
+            <tr data-k="4"><td>4</td><td>≤ 30</td><td>n<span class="sup">4</span></td></tr>
+            <tr data-k="5"><td>5</td><td>≤ 15</td><td>n<span class="sup">5</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="file-section-label">
+        <div class="sidebar-label" id="file-label" style="margin-bottom:0">Graph Files</div>
+        <span class="fmt-badge">.txt format</span>
+      </div>
+      <div id="file-grid">
+        <div class="file-drop" id="drop1"
+             ondragover="dragOver(event,'drop1')" ondragleave="dragLeave('drop1')" ondrop="dropFile(event,'file1','drop1')">
+          <input type="file" id="file1" accept=".txt" onchange="fileChosen('file1','drop1')" />
+          <div class="file-drop-icon">📄</div>
+          <div class="file-drop-main">Graph 1</div>
+          <div class="file-drop-sub">Click or drag a .txt file</div>
+          <div class="file-drop-name" id="name1"></div>
+        </div>
+        <div class="file-drop" id="drop2"
+             ondragover="dragOver(event,'drop2')" ondragleave="dragLeave('drop2')" ondrop="dropFile(event,'file2','drop2')"
+             style="display:none">
+          <input type="file" id="file2" accept=".txt" onchange="fileChosen('file2','drop2')" />
+          <div class="file-drop-icon">📄</div>
+          <div class="file-drop-main">Graph 2 <span style="color:var(--muted2);font-weight:400">(optional)</span></div>
+          <div class="file-drop-sub">Click or drag a .txt file</div>
+          <div class="file-drop-name" id="name2"></div>
+        </div>
+      </div>
+      <div class="fmt-hint">
+        <strong style="color:var(--text)">Format:</strong> Line 1: <code>N M</code> &nbsp; Lines 2+: <code>u v</code><br>
+        e.g. <code>25 24</code> / <code>0 1</code> / <code>0 2</code> / <code>9 10</code> …
+      </div>
+    </div>
+
+    <div class="error-box" id="error-box"></div>
+    <button class="run-btn" id="run-btn" onclick="runAnalysis()">
+      <div class="spinner" id="spinner"></div>
+      <span id="btn-text">Run Analysis</span>
+    </button>
+  </aside>
+
+  <!-- Main panel -->
+  <main class="main">
+
+    <div class="empty-state" id="empty-state">
+      <div>
+        <svg width="200" height="180" viewBox="0 0 200 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="100" y1="30" x2="40" y2="120" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="100" y1="30" x2="160" y2="120" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="40" y1="120" x2="160" y2="120" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="40" y1="120" x2="80" y2="155" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="160" y1="120" x2="120" y2="155" stroke="#d1d5db" stroke-width="2"/>
+          <line x1="80" y1="155" x2="120" y2="155" stroke="#d1d5db" stroke-width="2"/>
+          <circle cx="100" cy="30"  r="16" fill="#818cf8"/>
+          <circle cx="40"  cy="120" r="16" fill="#a78bfa"/>
+          <circle cx="160" cy="120" r="16" fill="#34d399"/>
+          <circle cx="80"  cy="155" r="14" fill="#fb923c"/>
+          <circle cx="120" cy="155" r="14" fill="#a78bfa"/>
+          <text x="100" y="35"  text-anchor="middle" fill="white" font-size="11" font-family="Inter" font-weight="700">0</text>
+          <text x="40"  y="125" text-anchor="middle" fill="white" font-size="11" font-family="Inter" font-weight="700">1</text>
+          <text x="160" y="125" text-anchor="middle" fill="white" font-size="11" font-family="Inter" font-weight="700">2</text>
+          <text x="80"  y="160" text-anchor="middle" fill="white" font-size="11" font-family="Inter" font-weight="700">3</text>
+          <text x="120" y="160" text-anchor="middle" fill="white" font-size="11" font-family="Inter" font-weight="700">4</text>
+        </svg>
+      </div>
+      <div class="empty-title">Graph Analyzer</div>
+      <div class="empty-sub">Upload a graph file in .txt format and click <strong>Run Analysis</strong> to see k-WL color refinement, degree comparison, and the isomorphism verdict.</div>
+      <div class="empty-chips">
+        <span class="empty-chip">True k-WL refinement</span>
+        <span class="empty-chip">Degree tables</span>
+        <span class="empty-chip">Isomorphism verdict</span>
+      </div>
+    </div>
+
+    <div id="results">
+      <div class="results-header">Analysis Results</div>
+      <div id="verdict-area"></div>
+      <div class="stats-row" id="stats-row"></div>
+
+      <!-- Side-by-side iteration stepper (compare mode) -->
+      <div class="stepper-section" id="stepper-section" style="display:none">
+
+        <div class="stepper-header">
+          <div class="stepper-title">WL Iteration Viewer</div>
+          <div class="stepper-counter">
+            Step <span id="step-current">1</span> of <span id="step-total">1</span>
+          </div>
+        </div>
+
+        <div class="diverge-callout" id="diverge-callout">
+          ⚠ Colour histograms diverge at this iteration — graphs are distinguishable from here.
+        </div>
+
+        <div class="step-dots" id="step-dots"></div>
+
+        <div class="stepper-controls">
+          <button class="step-btn" id="btn-prev" onclick="stepTo(currentStep - 1)">← Previous</button>
+          <button class="step-btn" id="btn-next" onclick="stepTo(currentStep + 1)">Next →</button>
+        </div>
+
+        <div class="graphs-side-by-side" id="graphs-side-by-side">
+          <div class="graph-panel">
+            <div class="graph-panel-header">
+              <span>Graph 1</span>
+              <span class="graph-panel-badge g1">G1</span>
+            </div>
+            <div id="g1-img-wrap"><div class="graph-panel-loading">Loading…</div></div>
+          </div>
+          <div class="graph-panel">
+            <div class="graph-panel-header">
+              <span>Graph 2</span>
+              <span class="graph-panel-badge g2">G2</span>
+            </div>
+            <div id="g2-img-wrap"><div class="graph-panel-loading">Loading…</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Non-iso analysis -->
+      <div id="analysis-area"></div>
+
+      <!-- Single graph grid (visualize mode) -->
+      <div class="images-section" id="single-images-section" style="display:none">
+        <div class="images-section-header">WL Iteration Visualisations</div>
+        <div id="images-area"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  let currentMode = 'visualize';
+  let kValue = 1;
+  let currentStep = 0;
+  let iterationSteps = [];   // [{iteration, images:[b64_g1, b64_g2]}, ...]
+  let divergeIteration = -1;
+  const API = window.location.origin + '/api';
+
+  // ── k controls ──────────────────────────────────────────────────────────────
+  function changeK(delta) {
+    kValue = Math.max(1, Math.min(5, kValue + delta));
+    document.getElementById('k-display').textContent = kValue;
+    document.getElementById('k-input').value = kValue;
+    document.querySelectorAll('#limits-body tr').forEach(tr => {
+      tr.classList.toggle('active-k', parseInt(tr.dataset.k) === kValue);
+    });
+  }
+
+  // ── Mode switching ──────────────────────────────────────────────────────────
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('tab-viz').classList.toggle('active', mode === 'visualize');
+    document.getElementById('tab-iso').classList.toggle('active', mode === 'isomorphism');
+    document.querySelectorAll('.nav-tab').forEach((t, i) => {
+      t.classList.toggle('active', (i === 0 && mode === 'visualize') || (i === 1 && mode === 'isomorphism'));
+    });
+    document.getElementById('drop2').style.display = mode === 'isomorphism' ? '' : 'none';
+    clearResults();
+  }
+
+  // ── File helpers ────────────────────────────────────────────────────────────
+  function fileChosen(inputId, dropId) {
+    const input = document.getElementById(inputId);
+    const drop  = document.getElementById(dropId);
+    const nameEl = document.getElementById(inputId === 'file1' ? 'name1' : 'name2');
+    if (input.files.length) { nameEl.textContent = input.files[0].name; drop.classList.add('has-file'); }
+  }
+  function dragOver(e, dropId) { e.preventDefault(); document.getElementById(dropId).classList.add('drag-over'); }
+  function dragLeave(dropId)   { document.getElementById(dropId).classList.remove('drag-over'); }
+  function dropFile(e, inputId, dropId) {
+    e.preventDefault(); dragLeave(dropId);
+    const dt = e.dataTransfer; const input = document.getElementById(inputId);
+    const nameEl = document.getElementById(inputId === 'file1' ? 'name1' : 'name2');
+    if (dt.files.length) {
+      const dts = new DataTransfer(); dts.items.add(dt.files[0]);
+      input.files = dts.files; nameEl.textContent = dt.files[0].name;
+      document.getElementById(dropId).classList.add('has-file');
+    }
+  }
+
+  // ── Run analysis ────────────────────────────────────────────────────────────
+  async function runAnalysis() {
+    clearResults(); hideError();
+    const k     = kValue;
+    const file1 = document.getElementById('file1').files[0];
+    const file2 = document.getElementById('file2').files[0];
+    if (!file1) { showError('Please select at least one .txt file.'); return; }
+    setLoading(true);
+
+    const fd = new FormData();
+    fd.append('k', k); fd.append('file1', file1);
+    if (currentMode === 'isomorphism' && file2) fd.append('file2', file2);
+
+    const endpoint = currentMode === 'visualize' ? `${API}/visualize` : `${API}/isomorphism`;
+    try {
+      const res  = await fetch(endpoint, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || data.error) { showError(data.error || 'Unknown server error.'); return; }
+      renderResults(data);
+    } catch (err) {
+      showError(`Server error. If running locally, make sure app.py is running (py app.py).`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Render results ──────────────────────────────────────────────────────────
+  function renderResults(data) {
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('results').style.display = 'block';
+
+    const verdictArea = document.getElementById('verdict-area');
+    const statsRow    = document.getElementById('stats-row');
+
+    if (data.mode === 'visualize') {
+      verdictArea.innerHTML = `
+        <div class="verdict-card viz">
+          <div class="verdict-icon-wrap">🎨</div>
+          <div>
+            <div class="verdict-title">Visualisation Complete</div>
+            <div class="verdict-detail">k = ${data.k} · ${data.num_nodes} nodes · ${data.num_edges} edges · ${data.num_iterations} refinement iteration(s)</div>
+          </div>
+        </div>`;
+      statsRow.innerHTML = `
+        <div class="stat-pill">Nodes <span>${data.num_nodes}</span></div>
+        <div class="stat-pill">Edges <span>${data.num_edges}</span></div>
+        <div class="stat-pill">Iterations <span>${data.num_iterations}</span></div>`;
+
+      // Single graph: show the grid
+      document.getElementById('single-images-section').style.display = 'block';
+      const imagesArea = document.getElementById('images-area');
+      imagesArea.innerHTML = '';
+      data.images.forEach((b64, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'graph-image-wrap';
+        wrap.innerHTML = `<img src="data:image/png;base64,${b64}" alt="Graph iteration ${i}" />`;
+        imagesArea.appendChild(wrap);
+      });
+
+    } else {
+      // Compare mode
+      const wl = data.wl_isomorphic;
+      const ex = data.exact_isomorphic;
+      const cls = wl ? 'iso' : 'notiso';
+      verdictArea.innerHTML = `
+        <div class="verdict-card ${cls}">
+          <div class="verdict-icon-wrap">${wl ? '✅' : '❌'}</div>
+          <div>
+            <div class="verdict-title">${wl ? 'ISOMORPHIC' : 'NOT ISOMORPHIC'} — k-WL verdict</div>
+            <div class="verdict-detail">
+              k = ${data.k} · NetworkX: <strong style="color:${ex ? 'var(--green)' : 'var(--red)'}">${ex ? 'Isomorphic' : 'Not isomorphic'}</strong><br>
+              G1: ${data.graph1.num_nodes} nodes, ${data.graph1.num_edges} edges, ${data.graph1.num_iterations} iter(s) &nbsp;·&nbsp;
+              G2: ${data.graph2.num_nodes} nodes, ${data.graph2.num_edges} edges, ${data.graph2.num_iterations} iter(s)
+            </div>
+          </div>
+        </div>`;
+      statsRow.innerHTML = `
+        <div class="stat-pill">k <span>${data.k}</span></div>
+        <div class="stat-pill">k-WL <span>${wl ? 'ISO' : 'NOT ISO'}</span></div>
+        <div class="stat-pill">Exact <span>${ex ? 'ISO' : 'NOT ISO'}</span></div>`;
+
+      // Find diverge iteration from analysis
+      divergeIteration = -1;
+      if (data.non_iso_analysis) {
+        const wld = data.non_iso_analysis.find(r => r.type === 'wl_divergence');
+        if (wld) divergeIteration = wld.iteration;
+      }
+
+      // Build stepper
+      iterationSteps = data.iteration_steps;
+      buildStepper(iterationSteps.length);
+      stepTo(0);
+      document.getElementById('stepper-section').style.display = 'block';
+
+      // Non-iso analysis cards
+      const analysisArea = document.getElementById('analysis-area');
+      analysisArea.innerHTML = '';
+      if (data.non_iso_analysis && data.non_iso_analysis.length > 0) {
+        const panel = document.createElement('div');
+        panel.className = 'analysis-panel';
+        panel.innerHTML = `<div class="analysis-panel-header">⚠ Why are these graphs not isomorphic?</div>`;
+        data.non_iso_analysis.forEach((reason, idx) => {
+          const tc = reason.type || '';
+          const card = document.createElement('div');
+          card.className = `reason-card ${tc}`;
+          card.innerHTML = `
+            <div class="reason-header">
+              <div class="reason-title">${reason.title}<span class="type-badge ${tc}">${reason.type.replace(/_/g, ' ')}</span></div>
+              <div class="reason-toggle">▼</div>
+            </div>
+            <div class="reason-body">${reason.detail}</div>`;
+          card.addEventListener('click', () => card.classList.toggle('open'));
+          if (idx < 2) card.classList.add('open');
+          panel.appendChild(card);
+        });
+        analysisArea.appendChild(panel);
+      }
+    }
+
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ── Stepper ─────────────────────────────────────────────────────────────────
+  function buildStepper(numSteps) {
+    document.getElementById('step-total').textContent = numSteps;
+    const dotsEl = document.getElementById('step-dots');
+    dotsEl.innerHTML = '';
+    for (let i = 0; i < numSteps; i++) {
+      const dot = document.createElement('button');
+      dot.className = 'step-dot' + (i === divergeIteration ? ' diverged' : '');
+      dot.title = `Iteration ${i}` + (i === divergeIteration ? ' (colours diverge here)' : '');
+      dot.onclick = () => stepTo(i);
+      dotsEl.appendChild(dot);
+    }
+  }
+
+  function stepTo(idx) {
+    if (!iterationSteps.length) return;
+    idx = Math.max(0, Math.min(iterationSteps.length - 1, idx));
+    currentStep = idx;
+
+    // Update counter
+    document.getElementById('step-current').textContent = idx + 1;
+
+    // Update dots
+    document.querySelectorAll('.step-dot').forEach((d, i) => {
+      d.classList.toggle('active', i === idx);
+    });
+
+    // Update prev/next buttons
+    document.getElementById('btn-prev').disabled = idx === 0;
+    document.getElementById('btn-next').disabled = idx === iterationSteps.length - 1;
+
+    // Diverge callout
+    const callout = document.getElementById('diverge-callout');
+    callout.classList.toggle('visible', idx === divergeIteration);
+
+    // Update images
+    const step = iterationSteps[idx];
+    const g1Wrap = document.getElementById('g1-img-wrap');
+    const g2Wrap = document.getElementById('g2-img-wrap');
+
+    if (step.images[0]) {
+      g1Wrap.innerHTML = `<img src="data:image/png;base64,${step.images[0]}" alt="Graph 1 iteration ${idx}" />`;
+    }
+    if (step.images[1]) {
+      g2Wrap.innerHTML = `<img src="data:image/png;base64,${step.images[1]}" alt="Graph 2 iteration ${idx}" />`;
+    }
+  }
+
+  // Keyboard arrow navigation
+  document.addEventListener('keydown', e => {
+    if (currentMode !== 'isomorphism' || !iterationSteps.length) return;
+    if (e.key === 'ArrowLeft')  stepTo(currentStep - 1);
+    if (e.key === 'ArrowRight') stepTo(currentStep + 1);
+  });
+
+  // ── Utilities ───────────────────────────────────────────────────────────────
+  function clearResults() {
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('empty-state').style.display = 'flex';
+    document.getElementById('verdict-area').innerHTML = '';
+    document.getElementById('stats-row').innerHTML = '';
+    document.getElementById('analysis-area').innerHTML = '';
+    document.getElementById('images-area').innerHTML = '';
+    document.getElementById('stepper-section').style.display = 'none';
+    document.getElementById('single-images-section').style.display = 'none';
+    document.getElementById('step-dots').innerHTML = '';
+    document.getElementById('g1-img-wrap').innerHTML = '<div class="graph-panel-loading">Loading…</div>';
+    document.getElementById('g2-img-wrap').innerHTML = '<div class="graph-panel-loading">Loading…</div>';
+    iterationSteps = []; currentStep = 0; divergeIteration = -1;
+  }
+
+  function showError(msg) { const b = document.getElementById('error-box'); b.textContent = '⚠ ' + msg; b.style.display = 'block'; }
+  function hideError()    { document.getElementById('error-box').style.display = 'none'; }
+
+  function setLoading(on) {
+    const btn = document.getElementById('run-btn');
+    btn.disabled = on;
+    btn.classList.toggle('loading', on);
+    document.getElementById('spinner').style.display = on ? 'block' : 'none';
+    document.getElementById('btn-text').textContent = on ? 'Running…' : 'Run Analysis';
+  }
+</script>
+</body>
+</html>
